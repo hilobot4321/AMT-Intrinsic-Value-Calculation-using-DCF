@@ -1,0 +1,164 @@
+# American Tower Corporation (AMT) - Discounted Cash Flow (DCF) Model
+# Using updated financial data provided
+
+import numpy as np
+import pandas as pd
+
+# Input Parameters from provided data
+ticker = "AMT"
+market_cap = 102.58e9  # $102.58 billion
+enterprise_value = 144.53e9  # $144.53 billion
+revenue = 10.13e9  # $10.13 billion
+ebitda = 6.64e9  # $6.64 billion
+shares_outstanding = 467.46e6  # 467.46 million shares
+
+# Calculate net debt from provided values
+net_debt = enterprise_value - market_cap  # = $41.95 billion
+
+# Current stock price (derived from market cap and shares)
+current_price = market_cap / shares_outstanding
+
+# DCF Model Assumptions
+# EBITDA margin from provided data
+ebitda_margin = ebitda / revenue  # ~65.5%
+
+# Estimate FCF from EBITDA (typical conversion rate for tower REITs)
+# Tower REITs typically convert 55-65% of EBITDA to FCF
+fcf_conversion = 0.60  # 60% of EBITDA converts to FCF
+fcf_ttm = ebitda * fcf_conversion  # Free Cash Flow TTM
+
+# Growth and Discount Rate Assumptions
+forecast_years = 5  # Initial forecast period
+wacc = 0.085  # Weighted Average Cost of Capital (8.5%)
+
+# Historical growth and industry analysis suggests tower REITs can grow 
+# FCF at 7-9% initially, declining over time
+forecast_growth_rates = [0.09, 0.08, 0.075, 0.07, 0.065]  # Declining growth rates
+terminal_growth_rate = 0.03  # Long-term growth rate (3%)
+
+# Function to calculate present value
+def present_value(future_value, discount_rate, time_period):
+    return future_value / ((1 + discount_rate) ** time_period)
+
+# 1. Project Future Free Cash Flows
+projected_fcf = []
+fcf_current = fcf_ttm
+
+print(f"\n{ticker} - Discounted Cash Flow Valuation Model")
+print("-" * 60)
+print(f"Current Stock Price: ${current_price:.2f}")
+print(f"Market Cap: ${market_cap/1e9:.2f} billion")
+print(f"Enterprise Value: ${enterprise_value/1e9:.2f} billion")
+print(f"Revenue: ${revenue/1e9:.2f} billion")
+print(f"EBITDA: ${ebitda/1e9:.2f} billion")
+print(f"EBITDA Margin: {ebitda_margin*100:.2f}%")
+print(f"Estimated FCF: ${fcf_ttm/1e9:.2f} billion")
+print(f"Net Debt: ${net_debt/1e9:.2f} billion")
+print(f"Shares Outstanding: {shares_outstanding/1e6:.2f} million")
+print(f"WACC (Discount Rate): {wacc*100:.2f}%")
+print(f"Terminal Growth Rate: {terminal_growth_rate*100:.2f}%")
+print("-" * 60)
+
+print("\nProjected Free Cash Flows (in billions USD):")
+print("-" * 70)
+print(f"{'Year':<10}{'FCF Growth':<15}{'FCF Amount':<20}{'Present Value':<20}")
+print("-" * 70)
+
+# Calculate projected FCF for explicit forecast period
+total_pv_fcf = 0
+for i in range(1, forecast_years + 1):
+    growth_rate = forecast_growth_rates[i-1]
+    fcf_next = fcf_current * (1 + growth_rate)
+    pv_fcf = present_value(fcf_next, wacc, i)
+    total_pv_fcf += pv_fcf
+    
+    print(f"{i:<10}{growth_rate*100:<15.2f}%${fcf_next/1e9:<20.2f}${pv_fcf/1e9:<20.2f}")
+    
+    fcf_current = fcf_next
+    projected_fcf.append(fcf_next)
+
+# 2. Calculate Terminal Value
+final_fcf = projected_fcf[-1]  # Last year's FCF
+terminal_value = final_fcf * (1 + terminal_growth_rate) / (wacc - terminal_growth_rate)
+pv_terminal_value = present_value(terminal_value, wacc, forecast_years)
+
+print("-" * 70)
+print(f"Terminal Value: ${terminal_value/1e9:.2f} billion")
+print(f"PV of Terminal Value: ${pv_terminal_value/1e9:.2f} billion")
+
+# 3. Calculate Enterprise Value
+calculated_enterprise_value = total_pv_fcf + pv_terminal_value
+
+# 4. Calculate Equity Value
+equity_value = calculated_enterprise_value - net_debt
+
+# 5. Calculate per-share value
+intrinsic_value_per_share = equity_value / shares_outstanding
+
+print("-" * 70)
+print(f"PV of Projected FCF: ${total_pv_fcf/1e9:.2f} billion")
+print(f"PV of Terminal Value: ${pv_terminal_value/1e9:.2f} billion")
+print(f"Calculated Enterprise Value: ${calculated_enterprise_value/1e9:.2f} billion")
+print(f"Net Debt: ${net_debt/1e9:.2f} billion")
+print(f"Equity Value: ${equity_value/1e9:.2f} billion")
+print("-" * 70)
+print(f"Intrinsic Value per Share: ${intrinsic_value_per_share:.2f}")
+print(f"Current Market Price: ${current_price:.2f}")
+print("-" * 70)
+
+# 6. Margin of Safety
+margin_of_safety_percent = (intrinsic_value_per_share - current_price) / intrinsic_value_per_share * 100
+margin_of_safety_status = "Undervalued" if margin_of_safety_percent > 0 else "Overvalued"
+
+print(f"Margin of Safety: {abs(margin_of_safety_percent):.2f}% ({margin_of_safety_status})")
+print("-" * 70)
+
+# 7. Sensitivity Analysis
+print("\nSensitivity Analysis - Intrinsic Value per Share")
+print("-" * 80)
+
+wacc_range = [wacc - 0.015, wacc - 0.005, wacc, wacc + 0.005, wacc + 0.015]
+growth_range = [terminal_growth_rate - 0.01, terminal_growth_rate - 0.005, 
+                terminal_growth_rate, terminal_growth_rate + 0.005, terminal_growth_rate + 0.01]
+
+sensitivity_table = pd.DataFrame(index=[f"{r*100:.1f}%" for r in growth_range], 
+                                columns=[f"{r*100:.1f}%" for r in wacc_range])
+
+for i, g in enumerate(growth_range):
+    for j, d in enumerate(wacc_range):
+        # Recalculate terminal value with different parameters
+        tv = final_fcf * (1 + g) / (d - g)
+        pv_tv = present_value(tv, d, forecast_years)
+        
+        # Recalculate total present value of FCF with different discount rate
+        pv_fcf_new = 0
+        fcf_current_new = fcf_ttm
+        for year in range(1, forecast_years + 1):
+            growth_rate = forecast_growth_rates[year-1]
+            fcf_next = fcf_current_new * (1 + growth_rate)
+            pv_fcf_new += present_value(fcf_next, d, year)
+            fcf_current_new = fcf_next
+        
+        # Recalculate intrinsic value
+        ev_new = pv_fcf_new + pv_tv
+        equity_value_new = ev_new - net_debt
+        intrinsic_value_per_share_new = equity_value_new / shares_outstanding
+        
+        sensitivity_table.iloc[i, j] = f"${intrinsic_value_per_share_new:.2f}"
+
+print(f"Terminal Growth Rate (Rows) vs. WACC (Columns)\n")
+print(sensitivity_table)
+print("-" * 80)
+
+# 8. Conclusion
+print("\nConclusion:")
+if margin_of_safety_percent > 15:
+    conclusion = f"AMT appears significantly undervalued with a {margin_of_safety_percent:.1f}% margin of safety."
+elif margin_of_safety_percent > 0:
+    conclusion = f"AMT appears slightly undervalued with a {margin_of_safety_percent:.1f}% margin of safety."
+elif margin_of_safety_percent > -15:
+    conclusion = f"AMT appears slightly overvalued by {abs(margin_of_safety_percent):.1f}%."
+else:
+    conclusion = f"AMT appears significantly overvalued by {abs(margin_of_safety_percent):.1f}%."
+
+print(conclusion)
